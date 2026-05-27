@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod/v4";
 import { runAudit } from "@/lib/audit-engine";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { rateLimit } from "@/lib/rate-limit";
 import { toolEntrySchema } from "@/lib/schemas";
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   const result = runAudit(parsed.data.tools);
 
   try {
-    await supabaseAdmin.from("audits").insert({
+    await getSupabaseAdmin().from("audits").insert({
       id: result.id,
       audit_data: result,
       created_at: result.createdAt,

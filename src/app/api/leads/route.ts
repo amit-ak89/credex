@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-import { supabaseAdmin } from "@/lib/supabase";
+import { getSupabaseAdmin } from "@/lib/supabase";
 import { rateLimit } from "@/lib/rate-limit";
 import { leadSchema } from "@/lib/schemas";
 
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { honeypot: _honeypot, ...lead } = parsed.data;
 
-  const { error: dbError } = await supabaseAdmin.from("leads").insert({
+  const { error: dbError } = await getSupabaseAdmin().from("leads").insert({
     email: lead.email,
     company_name: lead.companyName,
     role: lead.role,
