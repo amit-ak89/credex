@@ -44,16 +44,14 @@ export function SpendForm() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const form = useForm<SpendFormInput>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(spendFormSchema) as any,
+  const { register, control, handleSubmit, watch, setValue: setValueRaw, reset, formState: { errors } } = useForm<SpendFormInput>({
+    resolver: zodResolver(spendFormSchema),
     defaultValues: { tools: [defaultTool()] },
   });
 
-  const { register, control, handleSubmit, watch, setValue: setValueRaw, formState: { errors } } = form;
+  const { fields, append, remove } = useFieldArray({ control, name: "tools" });
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const setValue = setValueRaw as any;
-  const { fields, append, remove } = useFieldArray({ control, name: "tools" });
   const watchedTools = watch("tools");
 
   useEffect(() => {
@@ -61,9 +59,7 @@ export function SpendForm() {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as SpendFormInput;
-        if (parsed.tools?.length) {
-          form.reset({ tools: parsed.tools });
-        }
+        if (parsed.tools?.length) reset({ tools: parsed.tools });
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -86,7 +82,7 @@ export function SpendForm() {
   const totalSpend = watchedTools.reduce((sum, t) => sum + (Number(t.monthlySpend) || 0), 0);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit as SubmitHandler<SpendFormInput>)} className="space-y-6">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
       {fields.map((field, index) => {
         const selectedTool = watchedTools[index]?.tool as AITool;
         const toolData = PRICING_DATA[selectedTool];
@@ -113,11 +109,11 @@ export function SpendForm() {
               <div className="space-y-1.5">
                 <Label className="text-zinc-300 text-sm">Tool</Label>
                 <Select
-                  value={watchedTools[index]?.tool}
+                  value={watchedTools[index]?.tool ?? "chatgpt"}
                   onValueChange={(v) => {
                     setValue(`tools.${index}.tool`, v as AITool);
-                    const firstPlan = Object.keys(PRICING_DATA[v as AITool]?.plans ?? {})[0] ?? "";
-                    if (firstPlan) setValue(`tools.${index}.plan`, firstPlan);
+                    const firstPlan = Object.keys(PRICING_DATA[v as AITool]?.plans ?? {})[0] ?? "free";
+                    setValue(`tools.${index}.plan`, firstPlan);
                   }}
                 >
                   <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white">
@@ -136,7 +132,7 @@ export function SpendForm() {
               <div className="space-y-1.5">
                 <Label className="text-zinc-300 text-sm">Plan</Label>
                 <Select
-                  value={watchedTools[index]?.plan}
+                  value={watchedTools[index]?.plan ?? ""}
                   onValueChange={(v) => setValue(`tools.${index}.plan`, v)}
                 >
                   <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white">
@@ -158,7 +154,7 @@ export function SpendForm() {
                   type="number"
                   min="0"
                   step="0.01"
-                  {...register(`tools.${index}.monthlySpend`)}
+                  {...register(`tools.${index}.monthlySpend`, { valueAsNumber: true })}
                   className="bg-zinc-800 border-zinc-700 text-white"
                   placeholder="0.00"
                 />
@@ -172,7 +168,7 @@ export function SpendForm() {
                 <Input
                   type="number"
                   min="1"
-                  {...register(`tools.${index}.seats`)}
+                  {...register(`tools.${index}.seats`, { valueAsNumber: true })}
                   className="bg-zinc-800 border-zinc-700 text-white"
                   placeholder="1"
                 />
@@ -184,7 +180,7 @@ export function SpendForm() {
               <div className="space-y-1.5">
                 <Label className="text-zinc-300 text-sm">Primary Use Case</Label>
                 <Select
-                  value={watchedTools[index]?.useCase}
+                  value={watchedTools[index]?.useCase ?? "chat-assistant"}
                   onValueChange={(v) => setValue(`tools.${index}.useCase`, v as ToolEntry["useCase"])}
                 >
                   <SelectTrigger className="bg-zinc-800 border-zinc-700 text-white">
@@ -205,7 +201,7 @@ export function SpendForm() {
                 <Input
                   type="number"
                   min="1"
-                  {...register(`tools.${index}.teamSize`)}
+                  {...register(`tools.${index}.teamSize`, { valueAsNumber: true })}
                   className="bg-zinc-800 border-zinc-700 text-white"
                   placeholder="1"
                 />

@@ -7,7 +7,10 @@ import { AUDIT_SUMMARY_PROMPT } from "@/lib/prompts";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  if (!process.env.OPENAI_API_KEY) {
+    return NextResponse.json({ error: "AI unavailable" }, { status: 503 });
+  }
+
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   if (!rateLimit(`summary:${ip}`, 5, 60_000)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
@@ -25,6 +28,7 @@ Top recommendation: ${audit.recommendations.find((r) => r.severity === "high")?.
   `.trim();
 
   try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [

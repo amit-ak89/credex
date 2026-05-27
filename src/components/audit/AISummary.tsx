@@ -10,28 +10,35 @@ interface Props {
   audit: AuditResult;
 }
 
+function getFallback(audit: AuditResult): string {
+  return `Your team is spending $${audit.totalMonthlySpend.toLocaleString()}/month across ${audit.toolEntries.length} AI tool${audit.toolEntries.length > 1 ? "s" : ""}. Our audit identified $${audit.totalMonthlySavings.toFixed(0)}/month in potential savings — that's $${audit.totalAnnualSavings.toFixed(0)} annually. ${audit.totalMonthlySavings > 0 ? "The biggest opportunity is consolidating overlapping tools and right-sizing plans to match your actual team size." : "Your current AI stack appears well-optimized for your team size and usage patterns."}`;
+}
+
 export function AISummary({ audit }: Props) {
   const [summary, setSummary] = useState<string | null>(audit.summary ?? null);
   const [loading, setLoading] = useState(!audit.summary);
-  const [error, setError] = useState(false);
+  const [canRetry, setCanRetry] = useState(false);
 
   const fetchSummary = async () => {
     setLoading(true);
-    setError(false);
+    setCanRetry(false);
     try {
       const res = await fetch("/api/summary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ audit }),
       });
-      if (!res.ok) throw new Error();
       const data = await res.json();
-      setSummary(data.summary);
+      if (!res.ok || !data.summary) {
+        // 503 = key missing, use fallback silently. Other errors = show retry.
+        setSummary(getFallback(audit));
+        if (res.status !== 503) setCanRetry(true);
+      } else {
+        setSummary(data.summary);
+      }
     } catch {
-      setError(true);
-      setSummary(
-        `Your team is spending $${audit.totalMonthlySpend.toLocaleString()}/month across ${audit.toolEntries.length} AI tool${audit.toolEntries.length > 1 ? "s" : ""}. Our audit identified $${audit.totalMonthlySavings.toFixed(0)}/month in potential savings — that's $${audit.totalAnnualSavings.toFixed(0)} annually. ${audit.totalMonthlySavings > 0 ? "The biggest opportunity is consolidating overlapping tools and right-sizing plans to match your actual team size." : "Your current AI stack appears well-optimized for your team size and usage patterns."}`
-      );
+      setSummary(getFallback(audit));
+      setCanRetry(true);
     } finally {
       setLoading(false);
     }
@@ -46,7 +53,7 @@ export function AISummary({ audit }: Props) {
         <div className="flex items-center gap-2 mb-3">
           <Sparkles className="w-4 h-4 text-violet-400" />
           <span className="text-sm font-medium text-violet-300">AI Audit Summary</span>
-          {error && (
+          {canRetry && (
             <Button variant="ghost" size="sm" onClick={fetchSummary} className="ml-auto h-7 text-xs text-zinc-400 hover:text-white gap-1">
               <RefreshCw className="w-3 h-3" /> Retry
             </Button>
@@ -55,7 +62,7 @@ export function AISummary({ audit }: Props) {
         {loading ? (
           <div className="space-y-2">
             {[100, 90, 75].map((w, i) => (
-              <div key={i} className={`h-3 bg-zinc-800 rounded animate-pulse`} style={{ width: `${w}%` }} />
+              <div key={i} className="h-3 bg-zinc-800 rounded animate-pulse" style={{ width: `${w}%` }} />
             ))}
           </div>
         ) : (

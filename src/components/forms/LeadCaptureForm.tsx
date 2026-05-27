@@ -19,8 +19,7 @@ export function LeadCaptureForm({ auditId }: Props) {
   const [error, setError] = useState("");
 
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<LeadInput>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(leadSchema) as any,
+    resolver: zodResolver(leadSchema),
     defaultValues: { auditId, honeypot: "" },
   });
 
@@ -86,7 +85,7 @@ export function LeadCaptureForm({ auditId }: Props) {
             </div>
             <div className="space-y-1.5">
               <Label className="text-zinc-300 text-sm">Team Size *</Label>
-              <Input {...register("teamSize")} type="number" min="1" placeholder="10" className="bg-zinc-800 border-zinc-700 text-white" />
+              <Input {...register("teamSize", { valueAsNumber: true })} type="number" min="1" placeholder="10" className="bg-zinc-800 border-zinc-700 text-white" />
               {errors.teamSize && <p className="text-red-400 text-xs">{errors.teamSize.message}</p>}
             </div>
           </div>
