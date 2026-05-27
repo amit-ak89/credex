@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Resend } from "resend";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { rateLimit } from "@/lib/rate-limit";
 import { leadSchema } from "@/lib/schemas";
@@ -36,8 +35,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Failed to save" }, { status: 500 });
   }
 
-  // Send email only if key is configured
   if (process.env.RESEND_API_KEY) {
+    const { Resend } = await import("resend");
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
       from: "Credex AI <hello@credex.ai>",

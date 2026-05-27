@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
 import { rateLimit } from "@/lib/rate-limit";
 import type { AuditResult } from "@/types/audit";
 import { AUDIT_SUMMARY_PROMPT } from "@/lib/prompts";
@@ -28,6 +27,7 @@ Top recommendation: ${audit.recommendations.find((r) => r.severity === "high")?.
   `.trim();
 
   try {
+    const OpenAI = (await import("openai")).default;
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
