@@ -5,6 +5,8 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { rateLimit } from "@/lib/rate-limit";
 import { toolEntrySchema } from "@/lib/schemas";
 
+export const dynamic = "force-dynamic";
+
 const bodySchema = z.object({ tools: z.array(toolEntrySchema).min(1) });
 
 export async function POST(req: NextRequest) {

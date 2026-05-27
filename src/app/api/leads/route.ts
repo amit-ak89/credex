@@ -4,9 +4,10 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 import { rateLimit } from "@/lib/rate-limit";
 import { leadSchema } from "@/lib/schemas";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const resend = new Resend(process.env.RESEND_API_KEY);
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   if (!rateLimit(`leads:${ip}`, 3, 60_000)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });

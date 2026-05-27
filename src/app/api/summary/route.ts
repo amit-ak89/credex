@@ -4,9 +4,10 @@ import { rateLimit } from "@/lib/rate-limit";
 import type { AuditResult } from "@/types/audit";
 import { AUDIT_SUMMARY_PROMPT } from "@/lib/prompts";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const ip = req.headers.get("x-forwarded-for") ?? "unknown";
   if (!rateLimit(`summary:${ip}`, 5, 60_000)) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
