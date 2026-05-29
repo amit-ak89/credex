@@ -12,7 +12,9 @@ Credex audits your company's AI tooling spend and tells you exactly where you're
 
 | Landing | Audit Form | Results |
 |---------|-----------|---------|
-| ![Landing](docs/screenshots/landing.png) | ![Form](docs/screenshots/form.png) | ![Results](docs/screenshots/results.png) |
+| ![Landing](public/screenshots/landing.png) | ![Form](public/screenshots/form.png) | ![Results](public/screenshots/results.png) |
+
+> **How to add screenshots:** Run `npm run dev`, open each page in browser, press `Win + Shift + S` (Windows) to screenshot, save to `public/screenshots/` as `landing.png`, `form.png`, `results.png`.
 
 ---
 
