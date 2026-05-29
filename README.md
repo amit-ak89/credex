@@ -1,24 +1,36 @@
 # Credex AI Spend Auditor
 
-> Audit your company's AI tooling spend and get personalized cost optimization recommendations in 2 minutes.
+Credex audits your company's AI tooling spend and tells you exactly where you're overpaying — in under 2 minutes. It checks your plans, seat counts, and usage patterns against real pricing data and gives you a prioritized savings roadmap. Built for engineering managers and CTOs who are tired of guessing whether their $3k/month AI bill is justified.
 
-![Hero Screenshot](docs/screenshots/hero.png)
-![Results Screenshot](docs/screenshots/results.png)
+**Target users:** Engineering managers, CTOs, and finance leads at 10–200 person companies running 3+ AI tools simultaneously.
+
+**Live app:** `https://your-app.vercel.app` ← replace after deploy
+
+---
+
+## Screenshots
+
+| Landing | Audit Form | Results |
+|---------|-----------|---------|
+| ![Landing](docs/screenshots/landing.png) | ![Form](docs/screenshots/form.png) | ![Results](docs/screenshots/results.png) |
+
+---
 
 ## Features
 
-- **Instant Audit** — Enter your AI tools and get recommendations immediately
-- **8 Tools Supported** — Cursor, GitHub Copilot, Claude, ChatGPT, Anthropic API, OpenAI API, Gemini, Windsurf
-- **Deterministic Rules** — No hallucinated math. Rule-based engine with real pricing data
-- **AI Summary** — GPT-4o-mini personalized 100-word audit summary
-- **Shareable URLs** — Each audit gets a unique public URL
-- **Lead Capture** — Email confirmation via Resend
-- **Fully Typed** — TypeScript throughout
+- Audits 8 tools: Cursor, GitHub Copilot, Claude, ChatGPT, Anthropic API, OpenAI API, Gemini, Windsurf
+- Deterministic rule-based engine — no hallucinated math
+- GPT-4o-mini personalized 100-word summary
+- Shareable audit URLs with OpenGraph previews
+- Lead capture → Supabase + Resend confirmation email
+- 13 Vitest tests, CI/CD on every push to main
+
+---
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
+| Layer | Choice |
+|-------|--------|
 | Framework | Next.js 15 App Router |
 | Language | TypeScript |
 | Styling | Tailwind CSS v4 + shadcn/ui |
@@ -28,6 +40,8 @@
 | Forms | React Hook Form + Zod |
 | Testing | Vitest |
 | Deployment | Vercel |
+
+---
 
 ## Setup
 
@@ -39,13 +53,11 @@ cd credex
 npm install
 ```
 
-### 2. Configure environment variables
+### 2. Environment variables
 
 ```bash
 cp .env.example .env.local
 ```
-
-Fill in your values:
 
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -56,19 +68,17 @@ RESEND_API_KEY=re_...
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```
 
-### 3. Set up Supabase
+### 3. Supabase schema
 
-Run this SQL in your Supabase SQL editor:
+Run in your Supabase SQL editor:
 
 ```sql
--- Audits table
 create table audits (
   id text primary key,
   audit_data jsonb not null,
   created_at timestamptz default now()
 );
 
--- Leads table
 create table leads (
   id uuid primary key default gen_random_uuid(),
   email text not null,
@@ -79,19 +89,15 @@ create table leads (
   created_at timestamptz default now()
 );
 
--- Enable RLS
 alter table audits enable row level security;
 alter table leads enable row level security;
 
--- Public read for audits (for share page)
 create policy "Public audits are viewable" on audits for select using (true);
-
--- Service role can insert
 create policy "Service role can insert audits" on audits for insert with check (true);
 create policy "Service role can insert leads" on leads for insert with check (true);
 ```
 
-### 4. Run development server
+### 4. Run locally
 
 ```bash
 npm run dev
@@ -99,58 +105,89 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+> The core audit flow works without any API keys. Supabase keys enable share URLs and lead capture. OpenAI key enables AI summary. Resend key enables confirmation emails.
+
+---
+
 ## Running Tests
 
 ```bash
-npm run test          # Run once
-npm run test:watch    # Watch mode
+npm run test          # single run
+npm run test:watch    # watch mode
 ```
+
+---
 
 ## Deployment
 
-### Vercel (recommended)
+### Vercel
 
 1. Push to GitHub
-2. Import project in Vercel
-3. Add all environment variables from `.env.example`
+2. Import project at [vercel.com/new](https://vercel.com/new)
+3. Add all env vars from `.env.example`
 4. Deploy
 
-The CI/CD pipeline runs lint + type check + tests on every push to `main`.
+CI runs lint + typecheck + tests on every push to `main` via `.github/workflows/ci.yml`.
+
+---
+
+## Architecture Overview
+
+```
+Browser → SpendForm (client) → runAudit() → localStorage
+                                          → /audit/results
+                                          → /api/summary (OpenAI)
+                                          → /api/leads (Supabase + Resend)
+                                          → /share/:id (Supabase read)
+```
+
+Full diagram in [ARCHITECTURE.md](./ARCHITECTURE.md).
+
+---
 
 ## Project Structure
 
 ```
 src/
 ├── app/
-│   ├── page.tsx              # Landing page
-│   ├── audit/
-│   │   ├── page.tsx          # Spend input form
-│   │   └── results/page.tsx  # Audit results
-│   ├── share/[id]/page.tsx   # Shareable audit URL
+│   ├── page.tsx                  # Landing page
+│   ├── audit/page.tsx            # Spend input form
+│   ├── audit/results/page.tsx    # Audit results
+│   ├── share/[id]/page.tsx       # Shareable URL
 │   └── api/
-│       ├── audit/route.ts    # Audit API
-│       ├── leads/route.ts    # Lead capture API
-│       └── summary/route.ts  # AI summary API
+│       ├── audit/route.ts        # Persist audit to Supabase
+│       ├── leads/route.ts        # Lead capture + email
+│       └── summary/route.ts      # OpenAI summary
 ├── components/
-│   ├── audit/                # Audit-specific components
-│   ├── forms/                # Form components
-│   ├── layout/               # Navbar, Footer
-│   └── ui/                   # shadcn/ui components
+│   ├── audit/                    # RecommendationCard, SavingsChart, AISummary
+│   ├── forms/                    # SpendForm, LeadCaptureForm
+│   ├── layout/                   # Navbar, Footer
+│   └── ui/                       # shadcn/ui primitives
 ├── lib/
-│   ├── audit-engine.ts       # Core audit logic
-│   ├── pricing-data.ts       # Tool pricing data
-│   ├── schemas.ts            # Zod validation schemas
-│   ├── supabase.ts           # Supabase client
-│   ├── rate-limit.ts         # Rate limiting
-│   └── prompts.ts            # AI prompt templates
-└── types/
-    └── audit.ts              # TypeScript types
+│   ├── audit-engine.ts           # Core deterministic audit logic
+│   ├── pricing-data.ts           # Real pricing data for all 8 tools
+│   ├── schemas.ts                # Zod validation schemas
+│   ├── supabase.ts               # Lazy Supabase client
+│   ├── rate-limit.ts             # In-memory rate limiting
+│   └── prompts.ts                # OpenAI prompt templates
+└── types/audit.ts                # Shared TypeScript types
 ```
 
-## Decisions & Tradeoffs
+---
 
-- **Deterministic audit engine** over AI-generated recommendations: Ensures consistent, auditable results. No hallucinated savings numbers.
-- **localStorage for form state**: No auth required for the core flow. Reduces friction.
-- **Client-side audit computation**: Results are instant. Server API is used for persistence only.
-- **nanoid for audit IDs**: Short, URL-safe, collision-resistant without a database round-trip.
-- **In-memory rate limiting**: Simple and sufficient for MVP. Replace with Redis/Upstash for production scale.
+## Decisions / Tradeoffs
+
+**1. Client-side audit computation**
+The audit engine runs entirely in the browser. Results are instant with zero API latency. Tradeoff: audit logic is visible in the bundle. Acceptable for an MVP — the rules aren't a competitive moat, the UX is.
+
+**2. localStorage for audit state**
+No auth required. Users get results immediately without creating an account. Tradeoff: audits are lost if localStorage is cleared. Mitigated by the share URL flow which persists to Supabase.
+
+**3. Deterministic rules over AI-generated recommendations**
+Every savings number is calculated from real pricing data, not LLM output. This means no hallucinated math and fully auditable results. Tradeoff: rules need manual updates when vendors change pricing.
+
+**4. In-memory rate limiting**
+Simple `Map`-based rate limiter — zero dependencies, zero latency. Tradeoff: resets on every cold start and doesn't work across multiple Vercel instances. Fine for MVP; swap for Upstash Redis at scale.
+
+**5. Dynamic imports for Resend and OpenAI**
+Both SDKs validate API keys at module load time, which crashes Next.js builds when keys aren't present. Dynamic `await import()` inside handlers defers initialization to request time. Tradeoff: slight cold-start overhead on first invocation per instance.

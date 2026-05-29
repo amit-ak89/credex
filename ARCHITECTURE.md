@@ -1,92 +1,141 @@
 # Architecture
 
-## System Overview
-
-Credex AI Spend Auditor is a Next.js 15 App Router application with a clear separation between client-side audit computation and server-side persistence.
-
-## Data Flow
+## System Diagram
 
 ```mermaid
 flowchart TD
-    A[User visits /audit] --> B[SpendForm Component]
-    B --> C{localStorage}
-    C -->|persist state| C
-    B --> D[runAudit - client-side]
-    D --> E[audit-engine.ts]
-    E --> F[pricing-data.ts]
-    F --> E
-    E --> G[AuditResult]
-    G --> H[localStorage - save result]
-    G --> I[/audit/results?id=...]
-    I --> J[AISummary Component]
-    J --> K[POST /api/summary]
-    K --> L[OpenAI GPT-4o-mini]
-    I --> M[LeadCaptureForm]
-    M --> N[POST /api/leads]
-    N --> O[Supabase - leads table]
-    N --> P[Resend - confirmation email]
-    I --> Q[Share Button]
-    Q --> R[/share/:id]
-    R --> S[Supabase - audits table]
+    A[User: /audit] --> B[SpendForm\nclient component]
+    B -->|persist state| C[(localStorage)]
+    B -->|submit| D[runAudit\naudit-engine.ts]
+    D --> E[pricing-data.ts\nrule evaluation]
+    E --> D
+    D -->|AuditResult| C
+    D -->|redirect| F[/audit/results]
+
+    F -->|read| C
+    F --> G[AISummary component]
+    F --> H[LeadCaptureForm]
+    F --> I[SavingsChart\nRecharts]
+
+    G -->|POST| J[/api/summary]
+    J --> K[OpenAI\ngpt-4o-mini]
+    K --> J
+
+    H -->|POST| L[/api/leads]
+    L --> M[(Supabase\nleads table)]
+    L --> N[Resend\nemail]
+
+    F -->|share button| O[/share/:id]
+    O -->|read| P[(Supabase\naudits table)]
+
+    subgraph Persistence
+        M
+        P
+    end
+
+    subgraph External APIs
+        K
+        N
+    end
 ```
 
-## Component Architecture
+---
 
-```
-App Router Pages
-├── / (Landing)           → Static, SEO-optimized
-├── /audit                → Client component (SpendForm)
-├── /audit/results        → Client component (reads localStorage)
-└── /share/[id]           → Server component (reads Supabase)
+## Data Flow
 
-API Routes (Edge-compatible)
-├── POST /api/audit       → Runs audit + saves to Supabase
-├── POST /api/leads       → Saves lead + sends email
-└── POST /api/summary     → Calls OpenAI, returns summary
-```
+### Happy path
 
-## Key Design Decisions
+1. User fills SpendForm — each keystroke persists to `localStorage`
+2. On submit, `runAudit()` runs synchronously in the browser — no network call
+3. `AuditResult` is written to `localStorage` keyed by `audit.id`
+4. User is redirected to `/audit/results?id=<id>`
+5. Results page reads from `localStorage`, renders immediately
+6. `AISummary` fires a background `POST /api/summary` — shows fallback if it fails
+7. User submits lead form → `POST /api/leads` → Supabase insert + Resend email
+8. Share button copies `/share/<id>` to clipboard — that page reads from Supabase
 
-### Client-Side Audit Computation
-The audit engine runs entirely in the browser. This means:
-- **Zero latency** for results (no API round-trip)
-- **Works offline** after initial page load
-- **Deterministic** — same inputs always produce same outputs
-- The `/api/audit` route exists for server-side persistence (share URLs)
+### Share page flow
 
-### Supabase Schema
-```sql
-audits (id text PK, audit_data jsonb, created_at timestamptz)
-leads  (id uuid PK, email, company_name, role, team_size, audit_id FK, created_at)
-```
+The `/share/[id]` page is a Next.js server component. It fetches `audit_data` from Supabase at request time, strips `monthlySpend` from `toolEntries` before rendering (privacy), and generates dynamic OpenGraph metadata for rich link previews.
 
-JSONB for `audit_data` allows schema evolution without migrations.
+---
 
-### Rate Limiting
-In-memory rate limiting per IP. For production scale, replace with:
-- Upstash Redis + `@upstash/ratelimit`
-- Or Vercel's built-in edge rate limiting
+## Why Next.js 15
 
-## Stack Justification
+- App Router gives server components for SEO-critical pages (landing, share) and client components for interactive ones (form, results) — right tool for each job
+- API routes co-located with the app — no separate Express server to deploy
+- Vercel deployment is zero-config
+- React 19 + Turbopack makes local dev fast enough that it doesn't slow you down
 
-| Choice | Reason |
-|--------|--------|
-| Next.js 15 App Router | Server components for SEO, client components for interactivity |
-| Supabase | Instant PostgreSQL + auth + RLS without infrastructure management |
-| Resend | Best-in-class transactional email DX, React Email compatible |
-| Recharts | Composable, TypeScript-native, works with React 19 |
-| Zod v4 | Fastest Zod version, excellent TypeScript inference |
-| nanoid | Smaller than uuid, URL-safe, cryptographically random |
+Considered: Remix, plain Vite SPA. Remix would've worked but the ecosystem around shadcn/ui and Tailwind v4 is more Next.js-native. Vite SPA would've required a separate API layer.
 
-## Scaling Discussion
+---
 
-**Current MVP limits:**
-- Rate limiting is in-memory (resets on server restart)
-- No caching layer for share pages
+## Why Supabase
 
-**Path to scale:**
-1. Add Upstash Redis for distributed rate limiting
-2. Add `revalidate` or ISR to share pages for CDN caching
-3. Add Supabase indexes on `leads.email` and `audits.created_at`
-4. Move AI summary to streaming response for better UX at scale
-5. Add Vercel Analytics for conversion tracking
+- Instant PostgreSQL with a REST API — no ORM setup, no migrations for an MVP
+- Row Level Security means the anon key is safe to expose in the browser
+- JSONB column for `audit_data` means the audit schema can evolve without migrations
+- Free tier handles ~500MB storage and 2GB bandwidth — more than enough for launch
+
+Considered: PlanetScale, Neon, Firebase. Supabase wins on DX for small teams. Firebase would've required restructuring the data model.
+
+---
+
+## API Design
+
+All API routes are `POST`-only, `force-dynamic`, and rate-limited per IP.
+
+| Route | Purpose | Rate limit |
+|-------|---------|-----------|
+| `POST /api/audit` | Persist audit to Supabase | 10 req/min |
+| `POST /api/leads` | Save lead + send email | 3 req/min |
+| `POST /api/summary` | Generate AI summary | 5 req/min |
+
+Rate limiting is in-memory (`Map`-based). Keys are `action:ip`. Limits are intentionally conservative — the audit engine runs client-side so `/api/audit` is only called for persistence, not for the core UX.
+
+Error responses always return `{ error: string }` with appropriate HTTP status codes. No stack traces in production responses.
+
+---
+
+## Caching Strategy
+
+**Current (MVP):**
+- Landing page: statically rendered at build time, cached at CDN edge indefinitely
+- Share pages: server-rendered per request, no cache (audit data is user-specific)
+- API routes: `force-dynamic`, no caching
+
+**At scale:**
+- Share pages: add `export const revalidate = 3600` — cache for 1 hour, revalidate on demand
+- Landing page: already optimal
+- Add `Cache-Control: s-maxage=60` to `/api/summary` responses for identical audit inputs
+
+---
+
+## Scaling to 10k Audits/Day
+
+At 10k audits/day (~7 req/min average, ~50 req/min peak):
+
+**Bottlenecks in order of likelihood:**
+
+1. **In-memory rate limiter** — resets on cold start, doesn't work across instances
+   Fix: Replace with Upstash Redis + `@upstash/ratelimit` (~$10/month)
+
+2. **Supabase connection pool** — default pool is 15 connections
+   Fix: Enable Supabase connection pooling (PgBouncer) in project settings — free
+
+3. **OpenAI latency** — `/api/summary` takes 1–3s, blocks the results page feel
+   Fix: Switch to streaming response with `ReadableStream` — shows text as it generates
+
+4. **Cold starts on API routes** — Vercel serverless functions cold-start in ~300ms
+   Fix: Add `export const runtime = "edge"` to rate-limit-free routes for sub-50ms cold starts
+
+5. **Supabase storage** — at 10k audits/day, `audit_data` JSONB averages ~2KB each = ~20MB/day
+   Fix: Add a 90-day TTL cleanup job via Supabase cron or a weekly Edge Function
+
+**Infrastructure cost at 10k audits/day:**
+- Vercel Pro: $20/month
+- Supabase Pro: $25/month
+- OpenAI (gpt-4o-mini, ~150 tokens/summary, 30% conversion): ~$15/month
+- Resend (3k emails/month free, then $20/month): $0–20/month
+- Total: ~$60–80/month
